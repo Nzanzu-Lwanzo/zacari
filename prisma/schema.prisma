@@ -1,0 +1,65 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "mysql"
+    url      = env("DATABASE_URL")
+}
+
+// Enums
+enum AuthProvider {
+    credentials
+}
+
+enum Role {
+    client
+    admin
+}
+
+// Tables
+model User {
+    id       String @id @default(uuid())
+    name     String
+    email    String @unique
+    phone    String
+    password String
+    role     Role   @default(client)
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    auth Auth?
+
+    @@map("users")
+}
+
+model Auth {
+    id         String       @id @default(uuid())
+    provider   AuthProvider
+    providerID String?
+
+    // Tokens
+    rt     String?
+    rtExp  DateTime?
+    vt     String? // Verification token - confirm creation of an account
+    vtExp  DateTime?
+    dt     String? // Deletion token - confirm deletion of an account
+    dtExp  DateTime?
+    otp    String? // One time password - for 2FA login purpose
+    otpExp DateTime?
+
+    // Login securing
+    lastLoginDate       DateTime?
+    lastLoginIp         String?
+    failedLoginAttempts Int       @default(0)
+    failedLoginDate     DateTime?
+    failedLoginIp       String?
+
+    user     User     @relation(fields: [userID], references: [id], onDelete: Cascade)
+    userID   String   @unique
+    locked   Boolean?
+    verified Boolean? @default(false)
+
+    @@map("auths")
+}

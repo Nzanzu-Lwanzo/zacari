@@ -4,7 +4,7 @@ import { Injectable, ValidationPipe } from '@nestjs/common';
 export class ValidateDtoPipe extends ValidationPipe {
   constructor() {
     super({
-      forbidNonWhitelisted: true,
+      forbidUnknownValues: true,
       whitelist: true,
     });
   }

@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { CredentialModule } from './auth/credential/credential.module';
 import { PrismaModule } from './services/prisma/prisma.module';
 import { TokenModule } from './services/token/token.module';
@@ -32,13 +30,12 @@ import googleConfig from './lib/config/google.config';
     GoogleModule,
     UserModule,
   ],
-  controllers: [AppController],
+  controllers: [],
   providers: [
     {
       provide: APP_GUARD,
       useClass: AccessTokenGuard, // Global check the presence of access token
     },
-    AppService,
   ],
 })
 export class AppModule {}

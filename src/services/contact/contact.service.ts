@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ConfirmOptionsType } from 'src/auth/credential/lib/@types';
+import { ConfirmOptionsType } from 'src/auth/lib/@types';
 import { API_ORIGIN, CONFIRM_TOKEN_EXP, OTP_EXP } from 'src/lib/constants';
 
 @Injectable()

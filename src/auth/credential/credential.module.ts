@@ -9,6 +9,7 @@ import { AccessTokenGuard } from './common/guards/access-token.guard';
 import { RefreshTokenGuard } from './common/guards/refresh-token.guard';
 import { AccessTokenStrategy } from './common/strategies/access-token';
 import { RefreshTokenStrategy } from './common/strategies/refresh-token';
+import { UserModule } from 'src/api/user/user.module';
 
 @Module({
   controllers: [CredentialController],
@@ -20,6 +21,6 @@ import { RefreshTokenStrategy } from './common/strategies/refresh-token';
     RefreshTokenGuard,
     TempAtGuard,
   ],
-  imports: [PrismaModule, TokenModule, ContactModule],
+  imports: [PrismaModule, TokenModule, ContactModule, UserModule],
 })
 export class CredentialModule {}

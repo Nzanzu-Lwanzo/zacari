@@ -25,9 +25,9 @@ import {
   ConfirmOptionsType,
   ResendOptions,
   ResendOptionsType,
-  sendSMSMedium,
-  sendSMSMediumType,
-} from './lib/@types';
+  SendSMSMedium,
+  SendSMSMediumType,
+} from '../lib/@types';
 import { UpdateCredentialsDto } from './dtos/update.dto';
 
 @Controller('auth')
@@ -127,8 +127,8 @@ export class CredentialController {
    */
   @Get('/update')
   async initUpdate(
-    @Query('medium', new ParseEnumPipe(sendSMSMedium))
-    medium: sendSMSMediumType,
+    @Query('medium', new ParseEnumPipe(SendSMSMedium))
+    medium: SendSMSMediumType,
     @GetUser() user: User,
   ) {
     return await this.service.initUpdate(medium, user);

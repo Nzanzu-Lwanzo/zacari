@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
   PreconditionFailedException,
@@ -15,14 +16,9 @@ import {
   minutesSince,
 } from 'src/lib/datetime';
 import { ContactService } from 'src/services/contact/contact.service';
-import { selectAuthUser } from './lib/projection';
+import { selectAuthUser } from '../lib/projection';
 import { CredentialsDto } from './dtos/credentials.dto';
-import {
-  TIME_BEFORE_NEXT_LOGIN,
-  MAX_LOGIN_ATTEMPTS,
-  CONFIRM_TOKEN_EXP,
-  OTP_EXP,
-} from 'src/lib/constants';
+import { TIME_BEFORE_NEXT_LOGIN, MAX_LOGIN_ATTEMPTS } from 'src/lib/constants';
 import { TEMP_AT_EXP } from '../../lib/constants';
 import { ValidateOtpDto } from './dtos/otp.dto';
 import { User } from 'src/lib/global.types';
@@ -30,9 +26,10 @@ import { Auth, AuthProvider } from '@prisma/client';
 import {
   ConfirmOptionsType,
   ResendOptionsType,
-  sendSMSMediumType,
-} from './lib/@types';
+  SendSMSMediumType,
+} from '../lib/@types';
 import { UpdateCredentialsDto } from './dtos/update.dto';
+import { UserService } from 'src/api/user/user.service';
 
 @Injectable()
 export class CredentialService {
@@ -40,22 +37,29 @@ export class CredentialService {
     private readonly prisma: PrismaService,
     private readonly token_service: TokenService,
     private readonly contact_service: ContactService,
+    private readonly user_service: UserService,
   ) {}
 
   async createAccount(dto: CreateAccountDto) {
     let token = this.token_service.confirmationToken;
     let mailText = this.contact_service.formatConfirmEmail('creation', token);
-    return await this.contact_service
-      .sendEmail(dto.email, mailText)
+    return await this.accountWithEmailExists(dto.email)
+      .then((exists) => {
+        if (exists) {
+          throw new ConflictException('Account with email exists');
+        }
+        return;
+      })
+      .then(() => {
+        return this.contact_service.sendEmail(dto.email, mailText);
+      })
       .then((sent) => {
-        return (
-          sent ||
-          (() => {
-            throw new PreconditionFailedException(
-              "Couldn't send the confirmation email",
-            );
-          })()
-        );
+        if (!sent) {
+          throw new PreconditionFailedException(
+            "Couldn't send the confirmation email",
+          );
+        }
+        return;
       })
       .then(async () => {
         return await this.prisma.user.create({
@@ -135,6 +139,9 @@ export class CredentialService {
       .findUnique({
         where: {
           email: dto.email,
+          auth: {
+            provider: AuthProvider.credentials,
+          },
         },
         select: {
           id: true,
@@ -152,12 +159,8 @@ export class CredentialService {
         },
       })
       .then((user) => {
-        return (
-          user ||
-          (() => {
-            throw new NotFoundException('User not found');
-          })()
-        );
+        if (!user) throw new NotFoundException('User not found');
+        return user;
       })
       .then(({ auth, ...user }) => {
         if (auth?.locked) throw new UnauthorizedException('Account locked');
@@ -180,7 +183,7 @@ export class CredentialService {
         return { user, otp };
       })
       .then(async ({ user, otp }) => {
-        await this.saveOtpOnUser(user.id, otp);
+        await this.user_service.saveOtp(user.id, otp);
         // Generate a short-living token
         const temp_at = await this.token_service.getTempAt({
           id: user.id,
@@ -243,7 +246,7 @@ export class CredentialService {
           email: user.email,
           role: user.role,
         });
-        await this.saveRtOnUser(user.id, rt);
+        await this.user_service.saveRt(user.id, rt);
         await this.resetLoginAttempts(user.id);
         return { user, at, rt };
       });
@@ -270,7 +273,7 @@ export class CredentialService {
         let message = this.contact_service.formatOTPMessage(otp);
         let sent = await this.contact_service.sendSMS(account.phone, message);
         if (!sent) throw new PreconditionFailedException("Couldn't send OTP");
-        await this.saveOtpOnUser(user.id, otp);
+        await this.user_service.saveOtp(user.id, otp);
 
         // Generate and return temporary access token
         const temp_at = await this.token_service.getTempAt({
@@ -286,7 +289,10 @@ export class CredentialService {
         let mailText = this.contact_service.formatConfirmEmail(action, token);
         let sent = await this.contact_service.sendEmail(user.email, mailText);
         if (!sent) throw new PreconditionFailedException("Couldn't sent token");
-        await this.saveTokenOnUser(user.id, { token, name: 'vt' });
+        await this.user_service.saveConfirmToken(user.id, {
+          token,
+          name: 'vt',
+        });
         let temp_at = await this.token_service.getTempAt({
           id: user.id,
           email: user.email,
@@ -318,7 +324,7 @@ export class CredentialService {
       email: user.email,
       role: user.role,
     });
-    await this.saveRtOnUser(user.id, rt);
+    await this.user_service.saveRt(user.id, rt);
     return { at, rt };
   }
 
@@ -328,17 +334,18 @@ export class CredentialService {
     return await this.contact_service
       .sendEmail(user.email, mailText)
       .then((sent) => {
-        return (
-          sent ||
-          (() => {
-            throw new PreconditionFailedException(
-              "Couldn't send the confirmation email",
-            );
-          })()
-        );
+        if (!sent) {
+          throw new PreconditionFailedException(
+            "Couldn't send the confirmation email",
+          );
+        }
+        return;
       })
       .then(async () => {
-        await this.saveTokenOnUser(user.id, { token, name: 'dt' });
+        await this.user_service.saveConfirmToken(user.id, {
+          token,
+          name: 'dt',
+        });
         let temp_at = await this.token_service.getTempAt({
           id: user.id,
           email: user.email,
@@ -359,7 +366,7 @@ export class CredentialService {
     });
   }
 
-  async initUpdate(send_otp_medium: sendSMSMediumType, user: User) {
+  async initUpdate(send_otp_medium: SendSMSMediumType, user: User) {
     let otp = this.token_service.OTP;
     return this.prisma.user
       .findUnique({
@@ -367,12 +374,8 @@ export class CredentialService {
         select: { phone: true },
       })
       .then((_user) => {
-        return (
-          _user ||
-          (() => {
-            throw new UnauthorizedException('User not found');
-          })()
-        );
+        if (!_user) throw new UnauthorizedException('User not found');
+        return _user;
       })
       .then(async (_user) => {
         switch (send_otp_medium) {
@@ -388,17 +391,15 @@ export class CredentialService {
         }
       })
       .then((sent) => {
-        return (
-          sent ||
-          (() => {
-            throw new PreconditionFailedException(
-              `Couldn't send the OTP ${send_otp_medium}`,
-            );
-          })()
-        );
+        if (!sent) {
+          throw new PreconditionFailedException(
+            `Couldn't send the OTP ${send_otp_medium}`,
+          );
+        }
+        return;
       })
       .then(async () => {
-        await this.saveOtpOnUser(user.id, otp);
+        await this.user_service.saveOtp(user.id, otp);
         let temp_at = await this.token_service.getTempAt({
           id: user.id,
           email: user.email,
@@ -473,7 +474,7 @@ export class CredentialService {
           email: user.email,
           role: user.role,
         });
-        await this.saveRtOnUser(user.id, rt);
+        await this.user_service.saveRt(user.id, rt);
         return { user, at, rt };
       });
   }
@@ -506,46 +507,6 @@ export class CredentialService {
     });
   }
 
-  async saveOtpOnUser(uid: string, otp: string) {
-    return await this.prisma.auth.update({
-      where: {
-        userID: uid,
-      },
-      data: {
-        otp: await hashPwd(otp),
-        otpExp: createInterval(`${OTP_EXP}m`),
-      },
-    });
-  }
-
-  async saveRtOnUser(uid: string, rt: string) {
-    return await this.prisma.auth.update({
-      where: {
-        userID: uid,
-      },
-      data: {
-        rt,
-        rtExp: createInterval('30d'),
-      },
-    });
-  }
-
-  async saveTokenOnUser(
-    uid: string,
-    { token, name }: { token: string; name: 'vt' | 'dt' },
-  ) {
-    let exp = `${name}Exp`; // rtExp or dtExp -> See database schema
-    return await this.prisma.auth.update({
-      where: {
-        userID: uid,
-      },
-      data: {
-        [name]: token,
-        [exp]: createInterval(`${CONFIRM_TOKEN_EXP}m`),
-      },
-    });
-  }
-
   async resetLoginAttempts(uid: string) {
     return await this.prisma.auth.update({
       where: {
@@ -555,6 +516,14 @@ export class CredentialService {
         failedLoginAttempts: { set: 0 },
       },
     });
+  }
+
+  async accountWithEmailExists(email: string) {
+    const account = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    return account?.id;
   }
 
   isAccountToLock({

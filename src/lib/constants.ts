@@ -17,3 +17,6 @@ export const OTP_EXP = 15;
 export const TEMP_AT_AUD = 'tat';
 export const AT_AUD = 'at';
 export const RT_AUD = 'rt';
+
+// DEFAULT
+export const DEFAULT_PHONE_NUMBE = '000';

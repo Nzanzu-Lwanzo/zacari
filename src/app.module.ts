@@ -10,6 +10,9 @@ import jwtConfig from './lib/config/jwt.config';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
 import { AccessTokenGuard } from './auth/credential/common/guards/access-token.guard';
+import { GoogleModule } from './auth/google/google.module';
+import { UserModule } from './api/user/user.module';
+import googleConfig from './lib/config/google.config';
 
 @Module({
   imports: [
@@ -20,12 +23,14 @@ import { AccessTokenGuard } from './auth/credential/common/guards/access-token.g
     ConfigModule.forRoot({
       cache: true,
       isGlobal: true,
-      load: [jwtConfig],
+      load: [jwtConfig, googleConfig],
     }),
     JwtModule.register({
       global: true,
       secret: process.env.JWT_DEFAULT_SECRET,
     }),
+    GoogleModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [

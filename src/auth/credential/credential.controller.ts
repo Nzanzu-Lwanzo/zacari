@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Ip,
   ParseEnumPipe,
   Patch,
@@ -25,22 +27,26 @@ import {
   ConfirmOptionsType,
   ResendOptions,
   ResendOptionsType,
-  SendSMSMedium,
-  SendSMSMediumType,
+  SendOTPMedium,
+  SendOTPMediumType,
 } from '../lib/@types';
 import { UpdateCredentialsDto } from './dtos/update.dto';
+import CredentialAuthDoc from './lib/credential.doc';
 
 @Controller('auth')
 export class CredentialController {
   constructor(private readonly service: CredentialService) {}
 
   /**
-   * Initiate the sign up process. Will send a confirmation email to the user.
+   * Initiate the sign up procedure.
    */
   @Post('/sign-up')
   @SkipAtCheck()
+  @HttpCode(HttpStatus.CREATED)
+  @CredentialAuthDoc.createAccount()
   async createAccount(@Body(ValidateDtoPipe) dto: CreateAccountDto) {
-    return await this.service.createAccount(dto);
+    const { at } = await this.service.createAccount(dto);
+    return at;
   }
 
   /**
@@ -50,6 +56,7 @@ export class CredentialController {
    */
   @Get('/confirm')
   @SkipAtCheck()
+  @CredentialAuthDoc.confirm()
   async confirm(
     @Query('token') token: string,
     @Query('action', new ParseEnumPipe(ConfirmOptions))
@@ -66,20 +73,25 @@ export class CredentialController {
   }
 
   /**
-   * Initiate the log in process. Will send an OTP SMS to the user.
+   * Initiate the log in procedure.
    */
   @Post('/log-in')
   @SkipAtCheck()
+  @HttpCode(HttpStatus.OK)
+  @CredentialAuthDoc.logIn()
   async logIn(@Body(ValidateDtoPipe) dto: CredentialsDto, @Ip() ip: string) {
-    return await this.service.logIn(dto, ip);
+    const { at } = await this.service.logIn(dto, ip);
+    return at;
   }
 
   /**
-   * Validate the OTP and grant the user all the due authentication tokens.
+   * Validate the OTP and grant access & refresh tokens.
    */
   @Post('/validate')
   @SkipAtCheck()
+  @HttpCode(HttpStatus.OK)
   @UseGuards(TempAtGuard)
+  @CredentialAuthDoc.validateOTP()
   async validateOTP(
     @Body(ValidateDtoPipe) dto: ValidateOtpDto,
     @GetUser() user: User,
@@ -89,11 +101,12 @@ export class CredentialController {
   }
 
   /**
-   * Resend the OTP SMS or the confirmation email.
+   * Resend the OTP or the confirmation link.
    */
   @Get('/resend')
   @SkipAtCheck()
   @UseGuards(TempAtGuard)
+  @CredentialAuthDoc.resend()
   async resend(
     @Query('what', new ParseEnumPipe(ResendOptions)) what: ResendOptionsType,
     @GetUser() user: User,
@@ -103,35 +116,41 @@ export class CredentialController {
     if (what === 'confirm' && !action) {
       throw new BadRequestException('Missing query string');
     }
-    return await this.service.resend(what, user, action);
+    const { at } = await this.service.resend(what, user, action);
+    return at;
   }
 
   /**
    * Log the user out.
    */
   @Get('/log-out')
+  @CredentialAuthDoc.logOut()
   async logOut(@GetUser() user: User) {
     return await this.service.logOut(user);
   }
 
   /**
-   * Initiate account deletion process. Will send a confirmation email to the user.
+   * Initiate account deletion procedure.
    */
   @Get('/delete')
+  @CredentialAuthDoc.deleteAccount()
   async deleteAccount(@GetUser() user: User) {
-    return await this.service.deleteAccount(user);
+    const { at } = await this.service.deleteAccount(user);
+    return at;
   }
 
   /**
-   * Initiate credentials update process. Will send OTP SMS or email.
+   * Initiate credentials update procedure.
    */
   @Get('/update')
+  @CredentialAuthDoc.initUpdate()
   async initUpdate(
-    @Query('medium', new ParseEnumPipe(SendSMSMedium))
-    medium: SendSMSMediumType,
+    @Query('medium', new ParseEnumPipe(SendOTPMedium))
+    medium: SendOTPMediumType,
     @GetUser() user: User,
   ) {
-    return await this.service.initUpdate(medium, user);
+    const { at } = await this.service.initUpdate(medium, user);
+    return at;
   }
 
   /**
@@ -140,6 +159,7 @@ export class CredentialController {
   @Patch('/update')
   @SkipAtCheck()
   @UseGuards(TempAtGuard)
+  @CredentialAuthDoc.completeUpdate()
   async completeUpdate(
     @Body(ValidateDtoPipe) dto: UpdateCredentialsDto,
     @GetUser() user: User,
@@ -148,11 +168,12 @@ export class CredentialController {
   }
 
   /**
-   * Generate a fresh pair of authentication tokens.
+   * Tokens rotation.
    */
   @Get('/refresh')
   @SkipAtCheck()
   @UseGuards(RefreshTokenGuard)
+  @CredentialAuthDoc.refresh()
   async refresh(@GetUser() user: User) {
     return await this.service.refresh(user);
   }

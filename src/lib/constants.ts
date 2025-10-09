@@ -1,3 +1,5 @@
+import { Role } from '@prisma/client';
+
 // GLOBAL
 export const API_ORIGIN = 'http://localhost:3000';
 
@@ -20,3 +22,6 @@ export const RT_AUD = 'rt';
 
 // DEFAULT
 export const DEFAULT_PHONE_NUMBE = '000';
+
+// ENUMS
+export const USER_ROLES_ENUM_ARR: Role[] = ['client', 'admin'];

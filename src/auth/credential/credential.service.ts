@@ -26,7 +26,7 @@ import { Auth, AuthProvider } from '@prisma/client';
 import {
   ConfirmOptionsType,
   ResendOptionsType,
-  SendSMSMediumType,
+  SendOTPMediumType,
 } from '../lib/@types';
 import { UpdateCredentialsDto } from './dtos/update.dto';
 import { UserService } from 'src/api/user/user.service';
@@ -268,7 +268,7 @@ export class CredentialService {
         });
         if (!account) throw new NotFoundException('User not found');
 
-        // Generate, send and new OTP
+        // Generate, send and save new OTP
         let otp = this.token_service.OTP;
         let message = this.contact_service.formatOTPMessage(otp);
         let sent = await this.contact_service.sendSMS(account.phone, message);
@@ -366,7 +366,7 @@ export class CredentialService {
     });
   }
 
-  async initUpdate(send_otp_medium: SendSMSMediumType, user: User) {
+  async initUpdate(send_otp_medium: SendOTPMediumType, user: User) {
     let otp = this.token_service.OTP;
     return this.prisma.user
       .findUnique({
